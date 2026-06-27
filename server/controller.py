@@ -16,10 +16,11 @@ router = APIRouter(
     tags=["Booking"]
 )
 app = FastAPI()
-app.include_router(router)
 
-@router.get("/slots/{smb_id}", response_model=list[AvailableSlotResponse])
-def fetch_avaliable_slots(smb_id: UUID):
+@router.get("/slots", response_model=list[AvailableSlotResponse])
+def fetch_avaliable_slots(
+    smb_id: UUID = Query(...,)
+):
     slots = get_available_slots(smb_id)
     if not slots:
         return []
@@ -40,4 +41,12 @@ def create_new_appointment(payload: AppointmentCreate):
 @app.patch("/appointments/{id}/cancel", response_model=AppointmentResponse)
 def cancel_appointment(id: UUID):
     return update_appointment_status(id)
-    
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(router)
