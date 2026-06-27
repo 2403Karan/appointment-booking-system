@@ -17,6 +17,15 @@ router = APIRouter(
 )
 app = FastAPI()
 
+@router.get("/business-config")
+def fetch_business_config(
+    smb_id: UUID = Query(...,)
+):
+    config = get_business_config(smb_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Business configuration not found")
+    return config
+
 @router.get("/slots", response_model=list[AvailableSlotResponse])
 def fetch_avaliable_slots(
     smb_id: UUID = Query(...,)
@@ -32,13 +41,13 @@ def fetch_avaliable_slots(
         for slot in slots
     ]
 
-@app.post("/appointments", response_model=AppointmentResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/appointments", response_model=AppointmentResponse, status_code=status.HTTP_201_CREATED)
 def create_new_appointment(payload: AppointmentCreate):
     result = create_appointment(payload)
     print("Appointment created:", result)
     return result
 
-@app.patch("/appointments/{id}/cancel", response_model=AppointmentResponse)
+@router.patch("/appointments/{id}/cancel", response_model=AppointmentResponse)
 def cancel_appointment(id: UUID):
     return update_appointment_status(id)
 

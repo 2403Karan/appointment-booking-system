@@ -49,6 +49,18 @@ body {
 /* ── App Shell ── */
 .app { display: flex; flex-direction: column; min-height: 100vh; }
 
+.app-nav a {
+  text-decoration: none;
+}
+
+.app-nav a:hover {
+  text-decoration: none;
+}
+
+.app-nav a:visited {
+  text-decoration: none;
+}
+
 .app-header {
   background: var(--color-surface);
   border-bottom: 1px solid var(--color-border);

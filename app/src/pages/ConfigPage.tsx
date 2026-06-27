@@ -1,26 +1,37 @@
-import { useState, useEffect } from "react";
-import { useConfig } from "../hooks/useConfig";
-import type { SMBConfig } from "../types";
+import { useState } from "react";
+import { getBusinessConfig } from "../api";
 
 const TIMEZONES = [
-  "Asia/Kolkata", "America/New_York", "America/Chicago",
-  "America/Denver", "America/Los_Angeles", "Europe/London",
-  "Europe/Paris", "Asia/Tokyo", "Asia/Singapore",
-  "Australia/Sydney", "UTC",
+  "Asia/Kolkata",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "Europe/London",
+  "Europe/Paris",
+  "Asia/Tokyo",
+  "Asia/Singapore",
+  "Australia/Sydney",
+  "UTC",
 ];
 
 const WEEKDAYS = [
-  { label: "Mon", value: 1 }, { label: "Tue", value: 2 },
-  { label: "Wed", value: 3 }, { label: "Thu", value: 4 },
-  { label: "Fri", value: 5 }, { label: "Sat", value: 6 },
+  { label: "Mon", value: 1 },
+  { label: "Tue", value: 2 },
+  { label: "Wed", value: 3 },
+  { label: "Thu", value: 4 },
+  { label: "Fri", value: 5 },
+  { label: "Sat", value: 6 },
   { label: "Sun", value: 7 },
 ];
 
 const DURATIONS = [15, 30, 45, 60, 90, 120];
 
 export default function ConfigPage() {
-  const { config, loading, error, smbId, setSmbId, save } = useConfig();
-
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [configLoaded, setConfigLoaded] = useState(false);
+  const [description, setDescription] = useState("");
   const [form, setForm] = useState({
     timezone: "Asia/Kolkata",
     duration: 30,
@@ -29,98 +40,132 @@ export default function ConfigPage() {
     days: [1, 2, 3, 4, 5] as number[],
     excluded_days: [] as { day: string; message: string }[],
   });
-
-  const [inputSmbId, setInputSmbId] = useState(smbId);
+  const [inputSmbId, setInputSmbId] = useState("");
   const [newHoliday, setNewHoliday] = useState({ day: "", message: "" });
   const [success, setSuccess] = useState(false);
 
-  useEffect(() => {
-    if (config) {
-      setForm({
-        timezone: config.timezone,
-        duration: config.duration,
-        start_time: config.start_time,
-        end_time: config.end_time,
-        days: config.days.split(",").map(Number),
-        excluded_days: config.excluded_days?.days || [],
-      });
-    }
-  }, [config]);
+  const fetchBusinessConfig = async () => {
+  if (!inputSmbId.trim()) {
+    setDescription("❌ Please enter SMB ID.");
+    return;
+  }
 
-  const toggleDay = (val: number) => {
-    setForm((f) => ({
-      ...f,
-      days: f.days.includes(val) ? f.days.filter((d) => d !== val) : [...f.days, val].sort(),
+  try {
+    setLoading(true);
+    setError("");
+
+    const data = await getBusinessConfig(inputSmbId.trim());
+
+    setForm({
+      timezone: data.timezone,
+      duration: data.duration,
+      start_time: data.start_time,
+      end_time: data.end_time,
+      days: data.days,
+      excluded_days: (data.excluded_days || []).map(
+        (d: { date: string; reason: string }) => ({
+          day: d.date,
+          message: d.reason,
+        })
+      ),
+    });
+
+    setInputSmbId(data.smb_id);
+    setConfigLoaded(true);
+    setDescription("✅ Business configuration loaded successfully.");
+  } catch (err) {
+    console.error(err);
+    setConfigLoaded(true);
+    setError("Unable to fetch business configuration.");
+    setDescription("❌ Failed to fetch business configuration.");
+  } finally {
+    setLoading(false);
+  }
+};
+
+const toggleDay = (value: number) => {
+    setForm((current) => ({
+      ...current,
+      days: current.days.includes(value)
+        ? current.days.filter((day) => day !== value)
+        : [...current.days, value].sort(),
     }));
   };
 
   const addHoliday = () => {
-    if (!newHoliday.day || !newHoliday.message) return;
-    setForm((f) => ({
-      ...f,
-      excluded_days: [...f.excluded_days, { ...newHoliday }],
+    if (!newHoliday.day || !newHoliday.message.trim()) return;
+    setForm((current) => ({
+      ...current,
+      excluded_days: [...current.excluded_days, { day: newHoliday.day, message: newHoliday.message.trim() }],
     }));
     setNewHoliday({ day: "", message: "" });
   };
 
-  const removeHoliday = (i: number) => {
-    setForm((f) => ({
-      ...f,
-      excluded_days: f.excluded_days.filter((_, idx) => idx !== i),
-    }));
-  };
+  const handleSubmit = () => {
+  setDescription("✅ Configuration saved.");
+  console.log(success);
+  setSuccess(true);
 
-  const handleSubmit = async () => {
+  setTimeout(() => {
     setSuccess(false);
-    const payload: Omit<SMBConfig, "smb_id"> = {
-      timezone: form.timezone,
-      duration: form.duration,
-      start_time: form.start_time,
-      end_time: form.end_time,
-      days: form.days.join(","),
-      excluded_days: { days: form.excluded_days },
-    };
-    try {
-      await save(payload);
-      setSuccess(true);
-      setTimeout(() => setSuccess(false), 3000);
-    } catch {}
-  };
+    setDescription("");
+  }, 3000);
+};
 
   return (
     <div className="config-page">
       <p className="page-title">Business Configuration</p>
-      <p className="page-subtitle">Set your timezone, hours, working days and holiday closures.</p>
+      <p className="page-subtitle">Manage the timezone, operating hours, working days, and holiday exclusions.</p>
 
-      {/* Load existing config */}
+      {error && <div className="alert alert-error">{error}</div>}
+      {description && (
+        <div className="alert alert-success">
+          {description}
+        </div>
+      )}
+
       <div className="card" style={{ marginBottom: 20 }}>
-        <p className="section-label">Load existing config</p>
-        <div style={{ display: "flex", gap: 10 }}>
+        <p className="section-label">Business Identity</p>
+
+        <div
+          style={{
+            display: "flex",
+            gap: 10,
+            alignItems: "center",
+            flexWrap: "wrap",
+          }}
+        >
           <input
             className="form-input"
-            placeholder="Paste SMB ID (UUID)…"
+            placeholder="Paste SMB ID (UUID)"
             value={inputSmbId}
-            onChange={(e) => setInputSmbId(e.target.value)}
+            onChange={(event) => setInputSmbId(event.target.value)}
+            style={{ flex: 1 }}
           />
-          <button className="btn btn-secondary" onClick={() => setSmbId(inputSmbId)} style={{ whiteSpace: "nowrap" }}>
-            Load
+
+          <button
+            className="btn btn-secondary"
+            onClick={fetchBusinessConfig}
+          >
+            Configuration Details
           </button>
+
+          {configLoaded && (
+            <button
+              className="btn btn-primary"
+              onClick={handleSubmit}
+              disabled={form.days.length === 0}
+            >
+              {loading ? <span className="spinner" /> : null}
+              Save Configuration
+            </button>
+          )}
         </div>
-        {config && (
-          <p style={{ marginTop: 8, fontSize: 12, color: "var(--color-success)" }}>
-            ✓ Loaded config for <code style={{ fontFamily: "var(--font-mono)" }}>{config.smb_id}</code>
-          </p>
-        )}
       </div>
 
-      {error && <div className="alert alert-error">⚠ {error}</div>}
-      {success && <div className="alert alert-success">✓ Configuration saved successfully!</div>}
-
+    {configLoaded && (
       <div className="config-grid">
-        {/* Left column */}
         <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
-
-          {/* Timezone */}
           <div className="card">
             <p className="section-label">Timezone</p>
             <div className="form-group">
@@ -128,16 +173,15 @@ export default function ConfigPage() {
               <select
                 className="form-select"
                 value={form.timezone}
-                onChange={(e) => setForm((f) => ({ ...f, timezone: e.target.value }))}
+                onChange={(event) => setForm((current) => ({ ...current, timezone: event.target.value }))}
               >
-                {TIMEZONES.map((tz) => (
-                  <option key={tz} value={tz}>{tz}</option>
+                {TIMEZONES.map((timezone) => (
+                  <option key={timezone} value={timezone}>{timezone}</option>
                 ))}
               </select>
             </div>
           </div>
 
-          {/* Business Hours */}
           <div className="card">
             <p className="section-label">Business Hours</p>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14 }}>
@@ -147,7 +191,7 @@ export default function ConfigPage() {
                   type="time"
                   className="form-input"
                   value={form.start_time.slice(0, 5)}
-                  onChange={(e) => setForm((f) => ({ ...f, start_time: e.target.value + ":00" }))}
+                  onChange={(event) => setForm((current) => ({ ...current, start_time: `${event.target.value}:00` }))}
                 />
               </div>
               <div className="form-group">
@@ -156,7 +200,7 @@ export default function ConfigPage() {
                   type="time"
                   className="form-input"
                   value={form.end_time.slice(0, 5)}
-                  onChange={(e) => setForm((f) => ({ ...f, end_time: e.target.value + ":00" }))}
+                  onChange={(event) => setForm((current) => ({ ...current, end_time: `${event.target.value}:00` }))}
                 />
               </div>
             </div>
@@ -164,44 +208,37 @@ export default function ConfigPage() {
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">Slot Duration</label>
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-                {DURATIONS.map((d) => (
+                {DURATIONS.map((duration) => (
                   <button
-                    key={d}
-                    className={`day-chip ${form.duration === d ? "selected" : ""}`}
-                    onClick={() => setForm((f) => ({ ...f, duration: d }))}
+                    key={duration}
+                    className={`day-chip ${form.duration === duration ? "selected" : ""}`}
+                    onClick={() => setForm((current) => ({ ...current, duration }))}
                   >
-                    {d} min
+                    {duration} min
                   </button>
                 ))}
               </div>
             </div>
           </div>
 
-          {/* Working Days */}
           <div className="card">
-            <p className="section-label">Working Days</p>
+            <p className="section-label">Active Weekdays</p>
             <div className="day-checkboxes">
-              {WEEKDAYS.map((d) => (
+              {WEEKDAYS.map((day) => (
                 <button
-                  key={d.value}
-                  className={`day-chip ${form.days.includes(d.value) ? "selected" : ""}`}
-                  onClick={() => toggleDay(d.value)}
+                  key={day.value}
+                  className={`day-chip ${form.days.includes(day.value) ? "selected" : ""}`}
+                  onClick={() => toggleDay(day.value)}
                 >
-                  {d.label}
+                  {day.label}
                 </button>
               ))}
             </div>
           </div>
         </div>
 
-        {/* Right column — Holidays */}
         <div className="card">
           <p className="section-label">Holiday Exclusions</p>
-          <p style={{ fontSize: 12, color: "var(--color-text-sub)", marginBottom: 16 }}>
-            Appointments cannot be booked on these dates.
-          </p>
-
-          {/* Add holiday */}
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr auto", gap: 10, marginBottom: 20 }}>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">Date</label>
@@ -209,16 +246,16 @@ export default function ConfigPage() {
                 type="date"
                 className="form-input"
                 value={newHoliday.day}
-                onChange={(e) => setNewHoliday((h) => ({ ...h, day: e.target.value }))}
+                onChange={(event) => setNewHoliday((current) => ({ ...current, day: event.target.value }))}
               />
             </div>
             <div className="form-group" style={{ marginBottom: 0 }}>
               <label className="form-label">Reason</label>
               <input
                 className="form-input"
-                placeholder="e.g. Christmas Day"
+                placeholder="Christmas Day"
                 value={newHoliday.message}
-                onChange={(e) => setNewHoliday((h) => ({ ...h, message: e.target.value }))}
+                onChange={(event) => setNewHoliday((current) => ({ ...current, message: event.target.value }))}
               />
             </div>
             <div style={{ display: "flex", alignItems: "flex-end" }}>
@@ -229,47 +266,39 @@ export default function ConfigPage() {
           <hr className="divider" />
 
           {form.excluded_days.length === 0 ? (
-            <div style={{ textAlign: "center", padding: "32px 0", color: "var(--color-text-dim)", fontSize: 13 }}>
-              No holidays added yet
-            </div>
+            <div className="empty-state">No holiday exclusions added.</div>
           ) : (
-            <ul style={{ listStyle: "none", display: "flex", flexDirection: "column", gap: 8 }}>
-              {form.excluded_days.map((h, i) => (
-                <li key={i} className="holiday-row">
+            <ul className="holiday-list">
+              {form.excluded_days.map((holiday, index) => (
+                <li key={`${holiday.day}-${index}`} className="holiday-row">
                   <div>
-                    <span className="holiday-date">{h.day}</span>
-                    <span className="holiday-msg">{h.message}</span>
+                    <span className="holiday-date">{holiday.day}</span>
+                    <span className="holiday-msg">{holiday.message}</span>
                   </div>
-                  <button className="btn btn-danger" style={{ padding: "4px 10px", fontSize: 12 }} onClick={() => removeHoliday(i)}>
-                    Remove
-                  </button>
                 </li>
               ))}
             </ul>
           )}
         </div>
-      </div>
-
-      <div style={{ marginTop: 24, display: "flex", justifyContent: "flex-end" }}>
-        <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>
-          {loading ? <span className="spinner" /> : null}
-          {config ? "Update Configuration" : "Create Configuration"}
-        </button>
-      </div>
+      </div> )}
 
       <style>{`
         .config-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
           gap: 20px;
         }
-        @media (max-width: 768px) {
-          .config-grid { grid-template-columns: 1fr; }
+        .holiday-list {
+          list-style: none;
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
         }
         .holiday-row {
           display: flex;
           align-items: center;
           justify-content: space-between;
+          gap: 12px;
           padding: 10px 14px;
           background: var(--color-surface-2);
           border: 1px solid var(--color-border-soft);
@@ -282,6 +311,16 @@ export default function ConfigPage() {
           margin-right: 12px;
         }
         .holiday-msg { font-size: 13px; color: var(--color-text-sub); }
+        .empty-state {
+          text-align: center;
+          padding: 32px 0;
+          color: var(--color-text-dim);
+          font-size: 13px;
+        }
+        .small-btn { padding: 4px 10px; font-size: 12px; }
+        @media (max-width: 768px) {
+          .config-grid { grid-template-columns: 1fr; }
+        }
       `}</style>
     </div>
   );

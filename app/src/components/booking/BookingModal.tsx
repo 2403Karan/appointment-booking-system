@@ -3,7 +3,7 @@ import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
 import { createAppointment } from "../../api";
-import type { Slot } from "../../types";
+import type { Appointment, Slot } from "../../types";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
@@ -13,7 +13,7 @@ interface Props {
   tz: string;
   smbId: string;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (appointment: Appointment) => void;
 }
 
 export default function BookingModal({ slot, tz, smbId, onClose, onSuccess }: Props) {
@@ -29,13 +29,13 @@ export default function BookingModal({ slot, tz, smbId, onClose, onSuccess }: Pr
     setLoading(true);
     setError(null);
     try {
-      await createAppointment({
+      const appointment = await createAppointment({
         smb_id: smbId,
         slot_start: slot.start,
         slot_end: slot.end,
         lead_name: name.trim(),
       });
-      onSuccess();
+      onSuccess(appointment);
     } catch (e: any) {
       setError(e?.response?.data?.detail || "Booking failed. This slot may no longer be available.");
     } finally {

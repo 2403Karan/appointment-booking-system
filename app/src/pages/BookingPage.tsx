@@ -1,43 +1,74 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import timezone from "dayjs/plugin/timezone";
-import { useConfig } from "../hooks/useConfig";
+import { cancelAppointment } from "../api";
 import { useSlots } from "../hooks/useSlots";
 import CalendarGrid from "../components/calendar/CalendarGrid";
 import BookingModal from "../components/booking/BookingModal";
-import type { Slot } from "../types";
+import type { Appointment, Slot } from "../types";
 
 dayjs.extend(utc);
 dayjs.extend(timezone);
 
 export default function BookingPage() {
-  const { config, smbId, setSmbId } = useConfig();
-  const tz = config?.timezone || "UTC";
-  const { slots, loading, error, fetchSlots } = useSlots(smbId, tz);
-
-  const [weekStart, setWeekStart] = useState(() => dayjs().tz(tz || "UTC").startOf("week"));
-  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [smbId, setSmbId] = useState(import.meta.env.VITE_SMB_ID || "");
   const [inputSmbId, setInputSmbId] = useState(smbId);
+  const [weekStart, setWeekStart] = useState(() => dayjs().startOf("day"));
+  const [selectedSlot, setSelectedSlot] = useState<Slot | null>(null);
+  const [bookedAppointment, setBookedAppointment] = useState<Appointment | null>(null);
+  const [success, setSuccess] = useState(false);
+  const [cancelSuccess, setCancelSuccess] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
 
-  // Re-anchor week start when timezone changes
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
+  const { slots, loading, error, fetchSlots } = useSlots(smbId);
+  const slotDuration =
+    slots.length > 0 ? Math.max(dayjs(slots[0].end).diff(dayjs(slots[0].start), "minute"), 1) : 30;
+
   useEffect(() => {
-    setWeekStart(dayjs().tz(tz).startOf("week"));
-  }, [tz]);
+    if (smbId) fetchSlots();
+  }, [smbId, fetchSlots]);
 
-  useEffect(() => {
-    if (smbId) fetchSlots(weekStart);
-  }, [smbId, weekStart]);
+  const prevWeek = () => setWeekStart((w) => w.subtract(7, "days"));
+  const nextWeek = () => setWeekStart((w) => w.add(7, "days"));
 
-  const prevWeek = () => setWeekStart((w) => w.subtract(1, "week"));
-  const nextWeek = () => setWeekStart((w) => w.add(1, "week"));
-
-  const handleSuccess = () => {
+  const handleLoadBusiness = () => {
+    const nextSmbId = inputSmbId.trim();
+    if (!nextSmbId) return;
     setSelectedSlot(null);
+    setBookedAppointment(null);
+    setSuccess(false);
+    setCancelSuccess(false);
+    setCancelError(null);
+    setSmbId(nextSmbId);
+  };
+
+  const handleSuccess = (appointment: Appointment) => {
+    setSelectedSlot(null);
+    setBookedAppointment(appointment);
     setSuccess(true);
-    fetchSlots(weekStart);
+    setCancelSuccess(false);
+    setCancelError(null);
+    fetchSlots();
     setTimeout(() => setSuccess(false), 4000);
+  };
+
+  const handleCancelAppointment = async () => {
+    if (!bookedAppointment) return;
+    setCancelling(true);
+    setCancelError(null);
+    try {
+      const cancelled = await cancelAppointment(bookedAppointment.id);
+      setBookedAppointment(cancelled);
+      setCancelSuccess(true);
+      fetchSlots();
+    } catch (e: any) {
+      setCancelError(e?.response?.data?.detail || "Failed to cancel appointment.");
+    } finally {
+      setCancelling(false);
+    }
   };
 
   return (
@@ -45,46 +76,59 @@ export default function BookingPage() {
       <p className="page-title">Book an Appointment</p>
       <p className="page-subtitle">Select an available slot from the calendar below.</p>
 
-      {/* SMB loader */}
-      {!config && (
-        <div className="card" style={{ marginBottom: 20 }}>
-          <p className="section-label">Load Business</p>
-          <div style={{ display: "flex", gap: 10 }}>
-            <input
-              className="form-input"
-              placeholder="Enter SMB ID…"
-              value={inputSmbId}
-              onChange={(e) => setInputSmbId(e.target.value)}
-            />
-            <button className="btn btn-secondary" style={{ whiteSpace: "nowrap" }} onClick={() => setSmbId(inputSmbId)}>
-              Load
-            </button>
+      <div className="card" style={{ marginBottom: 20 }}>
+        <p className="section-label">Load Business</p>
+        <div style={{ display: "flex", gap: 10 }}>
+          <input
+            className="form-input"
+            placeholder="Enter SMB ID..."
+            value={inputSmbId}
+            onChange={(e) => setInputSmbId(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && handleLoadBusiness()}
+          />
+          <button className="btn btn-secondary" style={{ whiteSpace: "nowrap" }} onClick={handleLoadBusiness}>
+          Show Slots
+          </button>
+        </div>
+      </div>
+
+      {success && <div className="alert alert-success">Appointment confirmed.</div>}
+      {cancelSuccess && <div className="alert alert-success">Appointment cancelled.</div>}
+      {error && <div className="alert alert-error">{error}</div>}
+      {cancelError && <div className="alert alert-error">{cancelError}</div>}
+
+      {bookedAppointment && bookedAppointment.status !== "CANCELLED" && (
+        <div className="card cancel-card">
+          <div>
+            <p className="section-label">Current Appointment</p>
+            <p className="appointment-summary">
+              {dayjs.utc(bookedAppointment.slot_start).tz(tz).format("MMM D, YYYY h:mm A")} for{" "}
+              {bookedAppointment.lead_name}
+            </p>
           </div>
+          <button className="btn btn-danger" onClick={handleCancelAppointment} disabled={cancelling}>
+            {cancelling ? <span className="spinner" /> : "Cancel Appointment"}
+          </button>
         </div>
       )}
 
-      {success && <div className="alert alert-success">✓ Appointment confirmed! Check your email for details.</div>}
-      {error    && <div className="alert alert-error">⚠ {error}</div>}
-
-      {config && (
+      {smbId && (
         <>
-          {/* Toolbar */}
           <div className="cal-toolbar">
             <div className="cal-toolbar-left">
-              <button className="btn btn-secondary" onClick={prevWeek}>← Prev</button>
-              <button className="btn btn-secondary" onClick={() => { setWeekStart(dayjs().tz(tz).startOf("week")); }}>
+              <button className="btn btn-secondary" onClick={prevWeek}>Prev</button>
+              <button className="btn btn-secondary" onClick={() => setWeekStart(dayjs())}>
                 Today
               </button>
-              <button className="btn btn-secondary" onClick={nextWeek}>Next →</button>
+              <button className="btn btn-secondary" onClick={nextWeek}>Next</button>
               <span className="cal-week-label">
-                {weekStart.format("MMM D")} – {weekStart.add(6, "day").format("MMM D, YYYY")}
+                {weekStart.format("ddd, DD MMM")} -{" "}
+                {weekStart.add(6, "day").format("ddd, DD MMM YYYY")}
               </span>
             </div>
 
             <div className="cal-toolbar-right">
-              <span className="badge badge-info">
-                🌐 {tz}
-              </span>
+              <span className="badge badge-info">{tz}</span>
               {loading && <span className="spinner" />}
             </div>
           </div>
@@ -93,23 +137,22 @@ export default function BookingPage() {
             slots={slots}
             tz={tz}
             weekStart={weekStart}
-            duration={config.duration}
+            duration={slotDuration}
             onSelect={setSelectedSlot}
           />
 
-          {/* Legend */}
           <div className="cal-legend">
             <span className="legend-item">
-              <span className="legend-dot available" /> Available slot
+              <span className="legend-dot available" /> Available Slots
             </span>
             <span className="legend-item">
-              <span className="legend-dot empty" /> Unavailable / booked
+              <span className="legend-dot empty" /> Unavailable / booked Slots
             </span>
           </div>
         </>
       )}
 
-      {selectedSlot && config && (
+      {selectedSlot && smbId && (
         <BookingModal
           slot={selectedSlot}
           tz={tz}
@@ -128,7 +171,7 @@ export default function BookingPage() {
           gap: 12px;
           flex-wrap: wrap;
         }
-        .cal-toolbar-left { display: flex; align-items: center; gap: 8px; }
+        .cal-toolbar-left { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
         .cal-toolbar-right { display: flex; align-items: center; gap: 10px; }
         .cal-week-label {
           font-size: 14px;
@@ -156,6 +199,24 @@ export default function BookingPage() {
         }
         .legend-dot.available { background: var(--color-accent); }
         .legend-dot.empty { background: var(--color-border); }
+        .cancel-card {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 14px;
+          margin-bottom: 20px;
+        }
+        .appointment-summary {
+          margin-top: 6px;
+          color: var(--color-text);
+          font-size: 14px;
+        }
+        @media (max-width: 640px) {
+          .cancel-card {
+            align-items: stretch;
+            flex-direction: column;
+          }
+        }
       `}</style>
     </div>
   );

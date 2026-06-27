@@ -1,41 +1,45 @@
-import { useState } from "react";
-import ConfigPage from "./pages/ConfigPage";
+import { NavLink, Route, Routes } from "react-router-dom";
 import BookingPage from "./pages/BookingPage";
+import ConfigPage from "./pages/ConfigPage";
 import "./App.css";
 
-type Page = "config" | "booking";
-
 export default function App() {
-  const [page, setPage] = useState<Page>("booking");
-
   return (
     <div className="app">
       <header className="app-header">
         <div className="header-inner">
           <div className="logo">
-            <span className="logo-mark">L</span>
-            <span className="logo-text">yftr</span>
-            <span className="logo-tag">Scheduling</span>
+            <span className="logo-mark">ABS</span>
+            <span className="logo-text">Appointment Booking System</span>
           </div>
+
           <nav className="app-nav">
-            <button
-              className={`nav-btn ${page === "booking" ? "active" : ""}`}
-              onClick={() => setPage("booking")}
+            <NavLink
+              to="/booking"
+              className={({ isActive }) =>
+                `nav-btn ${isActive ? "active" : ""}`
+              }
             >
               Book Appointment
-            </button>
-            <button
-              className={`nav-btn ${page === "config" ? "active" : ""}`}
-              onClick={() => setPage("config")}
+            </NavLink>
+
+            <NavLink
+              to="/config"
+              className={({ isActive }) =>
+                `nav-btn ${isActive ? "active" : ""}`
+              }
             >
               Business Config
-            </button>
+            </NavLink>
           </nav>
         </div>
       </header>
 
       <main className="app-main">
-        {page === "booking" ? <BookingPage /> : <ConfigPage />}
+        <Routes>
+          <Route path="/booking" element={<BookingPage />} />
+          <Route path="/config" element={<ConfigPage />} />
+        </Routes>
       </main>
     </div>
   );
