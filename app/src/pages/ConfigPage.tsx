@@ -29,7 +29,6 @@ const DURATIONS = [15, 30, 45, 60, 90, 120];
 
 export default function ConfigPage() {
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [configLoaded, setConfigLoaded] = useState(false);
   const [description, setDescription] = useState("");
   const [form, setForm] = useState({
@@ -52,8 +51,6 @@ export default function ConfigPage() {
 
   try {
     setLoading(true);
-    setError("");
-
     const data = await getBusinessConfig(inputSmbId.trim());
 
     setForm({
@@ -72,12 +69,11 @@ export default function ConfigPage() {
 
     setInputSmbId(data.smb_id);
     setConfigLoaded(true);
-    setDescription("✅ Business configuration loaded successfully.");
+    setDescription("Business configuration loaded successfully.");
   } catch (err) {
     console.error(err);
-    setConfigLoaded(true);
-    setError("Unable to fetch business configuration.");
-    setDescription("❌ Failed to fetch business configuration.");
+    setConfigLoaded(false);
+    setDescription("Failed to fetch business configuration.");
   } finally {
     setLoading(false);
   }
@@ -117,9 +113,8 @@ const toggleDay = (value: number) => {
       <p className="page-title">Business Configuration</p>
       <p className="page-subtitle">Manage the timezone, operating hours, working days, and holiday exclusions.</p>
 
-      {error && <div className="alert alert-error">{error}</div>}
       {description && (
-        <div className="alert alert-success">
+        <div className="sucess-message" style={{ marginBottom: 20, color: "blue" }}>
           {description}
         </div>
       )}
